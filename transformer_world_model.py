@@ -265,7 +265,7 @@ def test_prediction(model, vae_model, device, epoch):
         if terminated or truncated:
             break
     
-    for _ in range(200):
+    for _ in range(500):
         action = sample_action(env)
         obs, _, terminated, truncated, _ = env.step(action)
         if terminated or truncated:
@@ -305,7 +305,7 @@ def test_prediction(model, vae_model, device, epoch):
         
         for _ in range(64):
             means, logvars, weights = model(current_states, current_actions)
-            next_state = sample_from_mog(means[:, -1:], logvars[:, -1:], weights[:, -1:], temperature=0.8)
+            next_state = sample_from_mog(means[:, -1:], logvars[:, -1:], weights[:, -1:], temperature=1.1)
             
             pred_states.append(next_state.squeeze(1))
             
@@ -349,7 +349,7 @@ if __name__ == "__main__":
     vae_model = load_model('vae_model.pth', latent_dim=128)
     
     print("Collecting trajectories...")
-    trajectories = collect_trajectories(vae_model, num_trajectories=800, seq_len=64)
+    trajectories = collect_trajectories(vae_model, num_trajectories=800, seq_len=256)
     
     print(f"Collected {len(trajectories)} trajectories")
     
@@ -358,11 +358,11 @@ if __name__ == "__main__":
     val_trajectories = trajectories[train_size:]
     
     print("Creating datasets...")
-    train_dataset = TrajectoryDataset(train_trajectories, seq_len=64)
-    val_dataset = TrajectoryDataset(val_trajectories, seq_len=64)
+    train_dataset = TrajectoryDataset(train_trajectories, seq_len=256)
+    val_dataset = TrajectoryDataset(val_trajectories, seq_len=256)
     
-    train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False)
+    train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=64, shuffle=False)
     
     print(f"Train dataset: {len(train_dataset)} sequences")
     print(f"Val dataset: {len(val_dataset)} sequences")
@@ -375,7 +375,7 @@ if __name__ == "__main__":
         num_layers=6,
         num_heads=8,
         num_components=8,
-        seq_len=64
+        seq_len=256
     )
     
     total_params = sum(p.numel() for p in model.parameters())
@@ -394,7 +394,7 @@ if __name__ == "__main__":
             'num_layers': 6,
             'num_heads': 8,
             'num_components': 8,
-            'seq_len': 64
+            'seq_len': 256
         }
     }, 'world_model_final.pth')
     
