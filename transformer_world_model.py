@@ -11,6 +11,7 @@ import warnings
 import os
 import pickle
 import cv2
+import wandb
 warnings.filterwarnings("ignore", category=UserWarning, module="pygame")
 
 class PositionalEncoding(nn.Module):
@@ -211,6 +212,12 @@ def train_world_model(model, train_loader, val_loader, vae_model, epochs=100, lr
         scheduler.step()
         avg_loss = train_loss / len(train_loader)
         
+        if (epoch + 1) % 10 != 0:
+            wandb.log({
+                "epoch": epoch + 1,
+                "train_loss": avg_loss
+            })
+        
         if (epoch + 1) % 10 == 0:
             model.eval()
             val_loss = 0
@@ -227,9 +234,22 @@ def train_world_model(model, train_loader, val_loader, vae_model, epochs=100, lr
             avg_val_loss = val_loss / len(val_loader)
             print(f'Epoch {epoch+1}: Train Loss: {avg_loss:.4f}, Val Loss: {avg_val_loss:.4f}')
             
-            if (epoch + 1) % 20 == 0:
+            wandb.log({
+                "epoch": epoch + 1,
+                "train_loss": avg_loss,
+                "val_loss": avg_val_loss,
+                "learning_rate": optimizer.param_groups[0]['lr']
+            })
+            
+            if (epoch + 1) % 100 == 0:
+                video_path = f'prediction_epoch_{epoch+1}.mp4'
                 test_prediction(model, vae_model, device, epoch + 1)
-                save_checkpoint(model, optimizer, epoch + 1, f'world_model_epoch_{epoch+1}.pth')
+                
+                checkpoint_path = f'world_model_epoch_{epoch+1}.pth'
+                save_checkpoint(model, optimizer, epoch + 1, checkpoint_path)
+                
+                wandb.log_artifact(checkpoint_path, name=f'world_model_epoch_{epoch+1}', type='model')
+                wandb.log_artifact(video_path, name=f'prediction_video_epoch_{epoch+1}', type='video')
     
     return model
 
@@ -345,6 +365,23 @@ def save_checkpoint(model, optimizer, epoch, filepath):
     print(f"Checkpoint saved: {filepath}")
 
 if __name__ == "__main__":
+    wandb.init(
+        project="car-racing-world-model",
+        config={
+            "latent_dim": 128,
+            "action_dim": 5,
+            "hidden_dim": 256,
+            "num_layers": 6,
+            "num_heads": 8,
+            "num_components": 8,
+            "seq_len": 128,
+            "num_trajectories": 3000,
+            "batch_size": 256,
+            "epochs": 1500,
+            "learning_rate": 1e-4
+        }
+    )
+    
     print("Loading VAE model...")
     vae_model = load_model('vae_model.pth', latent_dim=128)
     
@@ -381,10 +418,13 @@ if __name__ == "__main__":
     total_params = sum(p.numel() for p in model.parameters())
     print(f"Total parameters: {total_params:,}")
     
+    wandb.log({"total_parameters": total_params})
+    
     print("Training world model...")
     model = train_world_model(model, train_loader, val_loader, vae_model, epochs=1500, lr=1e-4)
     
     print("Saving final model...")
+    final_model_path = 'world_model_final.pth'
     torch.save({
         'model_state_dict': model.state_dict(),
         'config': {
@@ -396,6 +436,9 @@ if __name__ == "__main__":
             'num_components': 8,
             'seq_len': 128
         }
-    }, 'world_model_final.pth')
+    }, final_model_path)
+    
+    wandb.log_artifact(final_model_path, name='world_model_final', type='model')
+    wandb.finish()
     
     print("Training complete!")
