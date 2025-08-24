@@ -8,6 +8,8 @@ import matplotlib.pyplot as plt
 from torch.utils.data import Dataset, DataLoader
 from vae import load_model, encode_image, decode_latent, sample_action, preprocess_image
 import warnings
+import os
+import pickle
 warnings.filterwarnings("ignore", category=UserWarning, module="pygame")
 
 class PositionalEncoding(nn.Module):
@@ -35,10 +37,10 @@ class MixtureOfGaussiansHead(nn.Module):
         self.weights = nn.Linear(input_dim, num_components)
         
     def forward(self, x):
-        batch_size = x.size(0)
+        batch_size, seq_len = x.size(0), x.size(1)
         
-        means = self.means(x).view(batch_size, self.num_components, self.latent_dim)
-        logvars = self.logvars(x).view(batch_size, self.num_components, self.latent_dim)
+        means = self.means(x).view(batch_size, seq_len, self.num_components, self.latent_dim)
+        logvars = self.logvars(x).view(batch_size, seq_len, self.num_components, self.latent_dim)
         weights = F.softmax(self.weights(x), dim=-1)
         
         return means, logvars, weights
@@ -101,6 +103,16 @@ def mog_loss(pred_means, pred_logvars, pred_weights, target):
     return loss.mean()
 
 def collect_trajectories(vae_model, num_trajectories=1000, seq_len=64):
+    trajectory_file = 'trajectories.pkl'
+    
+    if os.path.exists(trajectory_file):
+        print(f"Loading existing trajectories from {trajectory_file}...")
+        with open(trajectory_file, 'rb') as f:
+            trajectories = pickle.load(f)
+        print(f"Loaded {len(trajectories)} trajectories")
+        return trajectories
+    
+    print("Collecting new trajectories...")
     env = gym.make("CarRacing-v3", render_mode="rgb_array", continuous=False)
     device = next(vae_model.parameters()).device
     
@@ -139,6 +151,11 @@ def collect_trajectories(vae_model, num_trajectories=1000, seq_len=64):
             print(f"Collected {traj_idx + 1} trajectories")
     
     env.close()
+    
+    print(f"Saving trajectories to {trajectory_file}...")
+    with open(trajectory_file, 'wb') as f:
+        pickle.dump(trajectories, f)
+    
     return trajectories
 
 class TrajectoryDataset(Dataset):
