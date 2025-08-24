@@ -349,7 +349,7 @@ if __name__ == "__main__":
     vae_model = load_model('vae_model.pth', latent_dim=128)
     
     print("Collecting trajectories...")
-    trajectories = collect_trajectories(vae_model, num_trajectories=800, seq_len=256)
+    trajectories = collect_trajectories(vae_model, num_trajectories=1500, seq_len=128)
     
     print(f"Collected {len(trajectories)} trajectories")
     
@@ -358,11 +358,11 @@ if __name__ == "__main__":
     val_trajectories = trajectories[train_size:]
     
     print("Creating datasets...")
-    train_dataset = TrajectoryDataset(train_trajectories, seq_len=256)
-    val_dataset = TrajectoryDataset(val_trajectories, seq_len=256)
+    train_dataset = TrajectoryDataset(train_trajectories, seq_len=128)
+    val_dataset = TrajectoryDataset(val_trajectories, seq_len=128)
     
-    train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=64, shuffle=False)
+    train_loader = DataLoader(train_dataset, batch_size=128, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=128, shuffle=False)
     
     print(f"Train dataset: {len(train_dataset)} sequences")
     print(f"Val dataset: {len(val_dataset)} sequences")
@@ -375,14 +375,14 @@ if __name__ == "__main__":
         num_layers=6,
         num_heads=8,
         num_components=8,
-        seq_len=256
+        seq_len=128
     )
     
     total_params = sum(p.numel() for p in model.parameters())
     print(f"Total parameters: {total_params:,}")
     
     print("Training world model...")
-    model = train_world_model(model, train_loader, val_loader, vae_model, epochs=200, lr=1e-4)
+    model = train_world_model(model, train_loader, val_loader, vae_model, epochs=500, lr=1e-4)
     
     print("Saving final model...")
     torch.save({
@@ -394,7 +394,7 @@ if __name__ == "__main__":
             'num_layers': 6,
             'num_heads': 8,
             'num_components': 8,
-            'seq_len': 256
+            'seq_len': 128
         }
     }, 'world_model_final.pth')
     
