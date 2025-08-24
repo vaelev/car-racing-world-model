@@ -10,6 +10,7 @@ from vae import load_model, encode_image, decode_latent, sample_action, preproce
 import warnings
 import os
 import pickle
+import cv2
 warnings.filterwarnings("ignore", category=UserWarning, module="pygame")
 
 class PositionalEncoding(nn.Module):
@@ -255,16 +256,27 @@ def test_prediction(model, vae_model, device, epoch):
     env = gym.make("CarRacing-v3", render_mode="rgb_array", continuous=False)
     
     obs, _ = env.reset()
+    
     for _ in range(50):
         obs, _, terminated, truncated, _ = env.step(0)
         if terminated or truncated:
             break
     
+    for _ in range(200):
+        action = sample_action(env)
+        obs, _, terminated, truncated, _ = env.step(action)
+        if terminated or truncated:
+            obs, _ = env.reset()
+            for _ in range(50):
+                obs, _, terminated, truncated, _ = env.step(0)
+                if terminated or truncated:
+                    break
+    
     seq_len = 32
     states = []
     actions = []
     
-    for i in range(seq_len):
+    for _ in range(seq_len):
         action = sample_action(env)
         cropped_obs = preprocess_image(obs)
         latent = encode_image(vae_model, cropped_obs, device)
@@ -288,7 +300,7 @@ def test_prediction(model, vae_model, device, epoch):
         current_states = input_states.clone()
         current_actions = input_actions.clone()
         
-        for step in range(16):
+        for _ in range(64):
             means, logvars, weights = model(current_states, current_actions)
             next_state = sample_from_mog(means[:, -1:], logvars[:, -1:], weights[:, -1:])
             
@@ -301,23 +313,25 @@ def test_prediction(model, vae_model, device, epoch):
     predicted_latents = torch.cat(pred_states, dim=0).cpu().numpy()
     decoded_images = decode_latent(vae_model, predicted_latents)
     
-    fig, axes = plt.subplots(2, 8, figsize=(16, 4))
-    for i in range(8):
-        if i < len(decoded_images):
-            axes[0, i].imshow(decoded_images[i])
-            axes[0, i].set_title(f'Pred {i+1}')
-            axes[0, i].axis('off')
-            
-            if i < 8:
-                axes[1, i].imshow(decoded_images[i + 8] if i + 8 < len(decoded_images) else decoded_images[-1])
-                axes[1, i].set_title(f'Pred {i+9}')
-                axes[1, i].axis('off')
-    
-    plt.tight_layout()
-    plt.savefig(f'prediction_epoch_{epoch}.png', dpi=150, bbox_inches='tight')
-    plt.close()
+    create_prediction_video(decoded_images, f'prediction_epoch_{epoch}.mp4')
     
     env.close()
+
+def create_prediction_video(images, filename, fps=10):
+    if len(images) == 0:
+        return
+    
+    height, width = images[0].shape[:2]
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    video_writer = cv2.VideoWriter(filename, fourcc, fps, (width, height))
+    
+    for img in images:
+        img_uint8 = (img * 255).astype(np.uint8)
+        img_bgr = cv2.cvtColor(img_uint8, cv2.COLOR_RGB2BGR)
+        video_writer.write(img_bgr)
+    
+    video_writer.release()
+    print(f"Saved prediction video: {filename}")
 
 def save_checkpoint(model, optimizer, epoch, filepath):
     torch.save({
