@@ -104,7 +104,7 @@ def mog_loss(pred_means, pred_logvars, pred_weights, target):
     return loss.mean()
 
 def collect_trajectories(vae_model, num_trajectories=1000, seq_len=64):
-    trajectory_file = 'trajectories.pkl'
+    trajectory_file = f'trajectories_seqlen_{seq_len}.pkl'
     
     if os.path.exists(trajectory_file):
         print(f"Loading existing trajectories from {trajectory_file}...")
