@@ -233,10 +233,13 @@ def train_world_model(model, train_loader, val_loader, vae_model, epochs=100, lr
     
     return model
 
-def sample_from_mog(means, logvars, weights):
+def sample_from_mog(means, logvars, weights, temperature=1.0):
     batch_size, seq_len, num_components, latent_dim = means.shape
     
-    component_idx = torch.multinomial(weights.view(-1, num_components), 1).view(batch_size, seq_len)
+    scaled_weights = weights / temperature
+    scaled_weights = F.softmax(scaled_weights, dim=-1)
+    
+    component_idx = torch.multinomial(scaled_weights.view(-1, num_components), 1).view(batch_size, seq_len)
     
     means_flat = means.view(batch_size * seq_len, num_components, latent_dim)
     logvars_flat = logvars.view(batch_size * seq_len, num_components, latent_dim)
@@ -245,7 +248,7 @@ def sample_from_mog(means, logvars, weights):
     selected_means = means_flat.gather(1, component_idx_flat.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, latent_dim)).squeeze(1)
     selected_logvars = logvars_flat.gather(1, component_idx_flat.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, latent_dim)).squeeze(1)
     
-    std = torch.exp(0.5 * selected_logvars)
+    std = torch.exp(0.5 * selected_logvars) * temperature
     eps = torch.randn_like(std)
     
     sampled = selected_means + eps * std
@@ -302,7 +305,7 @@ def test_prediction(model, vae_model, device, epoch):
         
         for _ in range(64):
             means, logvars, weights = model(current_states, current_actions)
-            next_state = sample_from_mog(means[:, -1:], logvars[:, -1:], weights[:, -1:])
+            next_state = sample_from_mog(means[:, -1:], logvars[:, -1:], weights[:, -1:], temperature=0.8)
             
             pred_states.append(next_state.squeeze(1))
             
