@@ -8,6 +8,7 @@ dependencies = [
     "gymnasium[box2d]>=1.2.0",
     "matplotlib>=3.10.5",
     "numpy>=2.3.2",
+    "opencv-python>=4.11.0.86",
     "torch>=2.8.0",
     "wandb>=0.21.1",
 ]
