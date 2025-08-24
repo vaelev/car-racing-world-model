@@ -233,17 +233,22 @@ def train_world_model(model, train_loader, val_loader, vae_model, epochs=100, lr
     return model
 
 def sample_from_mog(means, logvars, weights):
-    batch_size, num_components, latent_dim = means.shape
+    batch_size, seq_len, num_components, latent_dim = means.shape
     
-    component_idx = torch.multinomial(weights, 1).squeeze(-1)
+    component_idx = torch.multinomial(weights.view(-1, num_components), 1).view(batch_size, seq_len)
     
-    selected_means = means.gather(1, component_idx.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, latent_dim)).squeeze(1)
-    selected_logvars = logvars.gather(1, component_idx.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, latent_dim)).squeeze(1)
+    means_flat = means.view(batch_size * seq_len, num_components, latent_dim)
+    logvars_flat = logvars.view(batch_size * seq_len, num_components, latent_dim)
+    component_idx_flat = component_idx.view(-1)
+    
+    selected_means = means_flat.gather(1, component_idx_flat.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, latent_dim)).squeeze(1)
+    selected_logvars = logvars_flat.gather(1, component_idx_flat.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, latent_dim)).squeeze(1)
     
     std = torch.exp(0.5 * selected_logvars)
     eps = torch.randn_like(std)
     
-    return selected_means + eps * std
+    sampled = selected_means + eps * std
+    return sampled.view(batch_size, seq_len, latent_dim)
 
 def test_prediction(model, vae_model, device, epoch):
     model.eval()
@@ -275,8 +280,8 @@ def test_prediction(model, vae_model, device, epoch):
         env.close()
         return
     
-    input_states = torch.FloatTensor(states).unsqueeze(0).to(device)
-    input_actions = torch.LongTensor(actions).unsqueeze(0).to(device)
+    input_states = torch.FloatTensor(np.array(states)).unsqueeze(0).to(device)
+    input_actions = torch.LongTensor(np.array(actions)).unsqueeze(0).to(device)
     
     with torch.no_grad():
         pred_states = []
