@@ -349,7 +349,7 @@ if __name__ == "__main__":
     vae_model = load_model('vae_model.pth', latent_dim=128)
     
     print("Collecting trajectories...")
-    trajectories = collect_trajectories(vae_model, num_trajectories=1500, seq_len=128)
+    trajectories = collect_trajectories(vae_model, num_trajectories=3000, seq_len=128)
     
     print(f"Collected {len(trajectories)} trajectories")
     
@@ -361,8 +361,8 @@ if __name__ == "__main__":
     train_dataset = TrajectoryDataset(train_trajectories, seq_len=128)
     val_dataset = TrajectoryDataset(val_trajectories, seq_len=128)
     
-    train_loader = DataLoader(train_dataset, batch_size=128, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=128, shuffle=False)
+    train_loader = DataLoader(train_dataset, batch_size=256, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=256, shuffle=False)
     
     print(f"Train dataset: {len(train_dataset)} sequences")
     print(f"Val dataset: {len(val_dataset)} sequences")
@@ -382,7 +382,7 @@ if __name__ == "__main__":
     print(f"Total parameters: {total_params:,}")
     
     print("Training world model...")
-    model = train_world_model(model, train_loader, val_loader, vae_model, epochs=500, lr=1e-4)
+    model = train_world_model(model, train_loader, val_loader, vae_model, epochs=1500, lr=1e-4)
     
     print("Saving final model...")
     torch.save({
