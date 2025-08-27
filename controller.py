@@ -456,6 +456,11 @@ def train_controller(controller, world_model, vae_model, num_trajectories=10000,
         epoch_rewards = []
         epoch_losses = []
         
+        # Collect all trajectory data for batch processing
+        all_features = []
+        all_actions = []
+        all_returns = []
+        
         for trajectory in trajectories:
             # Calculate returns (cumulative rewards)
             rewards = trajectory['rewards']
@@ -471,20 +476,35 @@ def train_controller(controller, world_model, vae_model, num_trajectories=10000,
             if len(returns) > 1:
                 returns = (returns - np.mean(returns)) / (np.std(returns) + 1e-8)
             
-            # REINFORCE loss
-            log_probs = torch.FloatTensor(trajectory['log_probs']).to(device)
-            returns_tensor = torch.FloatTensor(returns).to(device)
+            # Store trajectory data for batch processing
+            features = trajectory['world_model_features']
+            actions = trajectory['actions']
             
-            # Policy gradient loss
-            loss = -torch.sum(log_probs * returns_tensor)
+            all_features.extend(features)
+            all_actions.extend(actions)
+            all_returns.extend(returns)
             
-            optimizer.zero_grad()
-            loss.backward()
-            torch.nn.utils.clip_grad_norm_(controller.parameters(), 1.0)
-            optimizer.step()
-            
-            epoch_rewards.append(np.sum(rewards))
-            epoch_losses.append(loss.item())
+            epoch_rewards.append(np.sum(trajectory['rewards']))
+        
+        # Convert to tensors
+        features_tensor = torch.FloatTensor(np.array(all_features)).to(device)
+        actions_tensor = torch.LongTensor(np.array(all_actions)).to(device)
+        returns_tensor = torch.FloatTensor(np.array(all_returns)).to(device)
+        
+        # Compute log probabilities with gradient tracking
+        action_probs = controller.get_action_probs(features_tensor)
+        action_dist = torch.distributions.Categorical(action_probs)
+        log_probs = action_dist.log_prob(actions_tensor)
+        
+        # Policy gradient loss
+        loss = -torch.sum(log_probs * returns_tensor)
+        
+        optimizer.zero_grad()
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(controller.parameters(), 1.0)
+        optimizer.step()
+        
+        epoch_losses.append(loss.item())
         
         avg_reward = np.mean(epoch_rewards)
         avg_loss = np.mean(epoch_losses)
