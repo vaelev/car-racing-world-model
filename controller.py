@@ -470,12 +470,6 @@ def train_controller(controller, world_model, vae_model, num_trajectories=10000,
                 G = r + 0.99 * G  # Discount factor
                 returns.insert(0, G)
             
-            returns = np.array(returns)
-            
-            # Normalize returns within trajectory
-            if len(returns) > 1:
-                returns = (returns - np.mean(returns)) / (np.std(returns) + 1e-8)
-            
             # Store trajectory data for batch processing
             features = trajectory['world_model_features']
             actions = trajectory['actions']
@@ -484,20 +478,28 @@ def train_controller(controller, world_model, vae_model, num_trajectories=10000,
             all_actions.extend(actions)
             all_returns.extend(returns)
             
-            epoch_rewards.append(np.sum(trajectory['rewards']))
+            epoch_rewards.append(np.sum(rewards))
         
         # Convert to tensors
         features_tensor = torch.FloatTensor(np.array(all_features)).to(device)
         actions_tensor = torch.LongTensor(np.array(all_actions)).to(device)
         returns_tensor = torch.FloatTensor(np.array(all_returns)).to(device)
         
-        # Compute log probabilities with gradient tracking
+        # Global baseline (mean return across all trajectories)
+        baseline = torch.mean(returns_tensor)
+        advantages = returns_tensor - baseline
+        
+        # Normalize advantages for stability (but preserve relative scale!)
+        if len(advantages) > 1 and torch.std(advantages) > 1e-8:
+            advantages = advantages / torch.std(advantages)
+        
+        # Recompute log probabilities with current policy (this is actually correct for on-policy methods)
         action_probs = controller.get_action_probs(features_tensor)
         action_dist = torch.distributions.Categorical(action_probs)
         log_probs = action_dist.log_prob(actions_tensor)
         
-        # Policy gradient loss
-        loss = -torch.sum(log_probs * returns_tensor)
+        # Policy gradient loss with baseline
+        loss = -torch.mean(log_probs * advantages)  # Use mean instead of sum for better scaling
         
         optimizer.zero_grad()
         loss.backward()
